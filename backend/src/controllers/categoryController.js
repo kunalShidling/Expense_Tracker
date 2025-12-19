@@ -1,90 +1,5 @@
-// import nano from "nano";
-// import dotenv from "dotenv";
-
-// dotenv.config();
-
-// const couch = nano(process.env.COUCHDB_URL);
-// const categoriesDb = couch.db.use("categories");
-
-// export const addCategory = async (req, res) => {
-//   try {
-//     const { name } = req.body;
-//     const userId = req.user.userId;
-
-//     if (!name) {
-//       return res.status(400).json({ error: "Category name is required" });
-//     }
-
-//     // Check if category already exists for this user
-//     const existing = await categoriesDb.find({
-//       selector: { userId, name },
-//     });
-
-//     if (existing.docs.length > 0) {
-//       return res.status(400).json({ error: "Category already exists" });
-//     }
-
-//     const category = {
-//       userId,
-//       name,
-//       createdAt: new Date().toISOString(),
-//     };
-
-//     const response = await categoriesDb.insert(category);
-//     res.status(201).json({ id: response.id, ...category });
-//   } catch (error) {
-//     console.error("Error adding category:", error);
-//     res.status(500).json({ error: "Failed to add category" });
-//   }
-// };
-
-// export const getCategories = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-
-//     const result = await categoriesDb.find({
-//       selector: { userId },
-//       sort: [{ name: "asc" }],
-//     });
-
-//     res.json(result.docs);
-//   } catch (error) {
-//     console.error("Error fetching categories:", error);
-//     res.status(500).json({ error: "Failed to fetch categories" });
-//   }
-// };
-
-// export const deleteCategory = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const userId = req.user.userId;
-
-//     // Get the document to verify ownership
-//     const doc = await categoriesDb.get(id);
-
-//     if (doc.userId !== userId) {
-//       return res.status(403).json({ error: "Unauthorized" });
-//     }
-
-//     await categoriesDb.destroy(id, doc._rev);
-//     res.json({ message: "Category deleted successfully" });
-//   } catch (error) {
-//     console.error("Error deleting category:", error);
-//     if (error.statusCode === 404) {
-//       return res.status(404).json({ error: "Category not found" });
-//     }
-//     res.status(500).json({ error: "Failed to delete category" });
-//   }
-// };
-
-import nano from "nano";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-const couch = nano(process.env.COUCHDB_URL);
-const categoriesDb = couch.db.use("categories");
-const expensesDb = couch.db.use("expenses");
+import Category from "../models/Category.js";
+import Expense from "../models/Expense.js";
 
 export const addCategory = async (req, res) => {
   try {
@@ -96,25 +11,22 @@ export const addCategory = async (req, res) => {
     }
 
     // Check if category already exists
-    const existingResult = await categoriesDb.find({
-      selector: { userId, name },
-    });
+    const existingCategory = await Category.findOne({ userId, name });
 
-    if (existingResult.docs.length > 0) {
+    if (existingCategory) {
       return res.status(400).json({ error: "Category already exists" });
     }
 
-    const category = {
+    const category = new Category({
       userId,
       name,
-      createdAt: new Date().toISOString(),
-    };
+    });
 
-    const response = await categoriesDb.insert(category);
+    await category.save();
 
     res.status(201).json({
       message: "Category created successfully",
-      category: { ...category, _id: response.id },
+      category: { ...category.toObject(), _id: category._id.toString() },
     });
   } catch (error) {
     console.error("Error creating category:", error);
@@ -126,23 +38,18 @@ export const getCategories = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const result = await categoriesDb.find({
-      selector: { userId },
-      sort: [{ createdAt: "desc" }],
-    });
+    const categories = await Category.find({ userId }).sort({ createdAt: -1 });
 
-    // 🔥 Get expense count for each category
-    const expensesResult = await expensesDb.find({
-      selector: { userId },
-    });
+    // Get expense count for each category
+    const expenses = await Expense.find({ userId });
 
-    const categoriesWithCount = result.docs.map((cat) => {
-      const expenseCount = expensesResult.docs.filter(
+    const categoriesWithCount = categories.map((cat) => {
+      const expenseCount = expenses.filter(
         (exp) => exp.category === cat.name
       ).length;
 
       return {
-        ...cat,
+        ...cat.toObject(),
         expenseCount,
       };
     });
@@ -165,7 +72,11 @@ export const updateCategory = async (req, res) => {
     }
 
     // Get old category
-    const oldCategory = await categoriesDb.get(id);
+    const oldCategory = await Category.findById(id);
+    
+    if (!oldCategory) {
+      return res.status(404).json({ error: "Category not found" });
+    }
     
     if (oldCategory.userId !== userId) {
       return res.status(403).json({ error: "Unauthorized" });
@@ -174,43 +85,28 @@ export const updateCategory = async (req, res) => {
     const oldName = oldCategory.name;
 
     // Check if new name already exists
-    const existingResult = await categoriesDb.find({
-      selector: { userId, name: newName },
-    });
+    const existingCategory = await Category.findOne({ userId, name: newName });
 
-    if (existingResult.docs.length > 0 && existingResult.docs[0]._id !== id) {
+    if (existingCategory && existingCategory._id.toString() !== id) {
       return res.status(400).json({ error: "Category name already exists" });
     }
 
     // Update category
-    const updated = await categoriesDb.insert({
-      ...oldCategory,
-      name: newName,
-      updatedAt: new Date().toISOString(),
-    });
+    oldCategory.name = newName;
+    await oldCategory.save();
 
-    // 🔥 CASCADE UPDATE: Update all expenses with this category
-    const expensesResult = await expensesDb.find({
-      selector: { userId, category: oldName },
-    });
-
-    console.log(`Cascading update: ${expensesResult.docs.length} expenses found with category "${oldName}"`);
-
-    // Update each expense
-    const updatePromises = expensesResult.docs.map((expense) =>
-      expensesDb.insert({
-        ...expense,
-        category: newName,
-        updatedAt: new Date().toISOString(),
-      })
+    // CASCADE UPDATE: Update all expenses with this category
+    const updateResult = await Expense.updateMany(
+      { userId, category: oldName },
+      { $set: { category: newName } }
     );
 
-    await Promise.all(updatePromises);
+    console.log(`Cascading update: ${updateResult.modifiedCount} expenses updated from "${oldName}" to "${newName}"`);
 
     res.json({
       message: "Category updated successfully",
-      category: { ...oldCategory, name: newName, _id: id, _rev: updated.rev },
-      expensesUpdated: expensesResult.docs.length,
+      category: { ...oldCategory.toObject(), _id: id },
+      expensesUpdated: updateResult.modifiedCount,
     });
   } catch (error) {
     console.error("Error updating category:", error);
@@ -223,26 +119,28 @@ export const deleteCategory = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.userId;
 
-    const category = await categoriesDb.get(id);
+    const category = await Category.findById(id);
+
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
 
     if (category.userId !== userId) {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    // 🔥 CHECK CASCADE: Check if category is used in expenses
-    const expensesResult = await expensesDb.find({
-      selector: { userId, category: category.name },
-    });
+    // CHECK CASCADE: Check if category is used in expenses
+    const expenseCount = await Expense.countDocuments({ userId, category: category.name });
 
-    if (expensesResult.docs.length > 0) {
+    if (expenseCount > 0) {
       return res.status(400).json({
-        error: `Cannot delete category "${category.name}". It is used in ${expensesResult.docs.length} expense(s). Please reassign or delete those expenses first.`,
-        expenseCount: expensesResult.docs.length,
+        error: `Cannot delete category "${category.name}". It is used in ${expenseCount} expense(s). Please reassign or delete those expenses first.`,
+        expenseCount: expenseCount,
       });
     }
 
     // Delete category
-    await categoriesDb.destroy(id, category._rev);
+    await category.deleteOne();
 
     res.json({ 
       message: "Category deleted successfully",

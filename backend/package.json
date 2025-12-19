@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "setup": "node src/setup.js"
+    "setup": "node src/setupIndexes.js",
+    "test:db": "node src/testConnection.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -16,7 +17,7 @@
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.3",
-    "nano": "^10.0.0",
+    "mongoose": "^8.20.3",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

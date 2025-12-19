@@ -1,20 +1,29 @@
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
+import "../styles/Navbar.css";
 
 export default function Navbar() {
   const logout = () => {
-    localStorage.clear();
-    window.location.href = "/login";
+    localStorage.removeItem("token");
+    window.location.href = "/";
   };
 
   return (
-    <nav style={{ padding: 10, background: "#eee" }}>
-      <Link to="/">Dashboard</Link> |{" "}
-      <Link to="/expenses">Expenses</Link> |{" "}
-      <Link to="/add-expense">Add Expense</Link> |{" "}
-      <Link to="/categories">Categories</Link> |{" "}
-      <Link to="/predict">AI Predict</Link> |{" "}
-      
-      <button onClick={logout} style={{ marginLeft: 10 }}>Logout</button>
+    <nav className="navbar">
+      <div className="navbar-content">
+        <div className="navbar-brand">
+          <span>💰</span>
+          <NavLink to="/dashboard">Expense Tracker</NavLink>
+        </div>
+        <div className="navbar-links">
+          <NavLink to="/dashboard">📊 Dashboard</NavLink>
+          <NavLink to="/expenses">💵 Expenses</NavLink>
+          <NavLink to="/categories">🏷️ Categories</NavLink>
+          <NavLink to="/predict">🤖 AI Predict</NavLink>
+          <button onClick={logout} className="logout-btn">
+            Logout →
+          </button>
+        </div>
+      </div>
     </nav>
   );
 }
