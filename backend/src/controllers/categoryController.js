@@ -10,23 +10,20 @@ export const addCategory = async (req, res) => {
       return res.status(400).json({ error: "Category name is required" });
     }
 
-    // Check if category already exists
-    const existingCategory = await Category.findOne({ userId, name });
+    const existingCategory = await Category.findOne({ where: { userId, name } });
 
     if (existingCategory) {
       return res.status(400).json({ error: "Category already exists" });
     }
 
-    const category = new Category({
+    const category = await Category.create({
       userId,
       name,
     });
 
-    await category.save();
-
     res.status(201).json({
       message: "Category created successfully",
-      category: { ...category.toObject(), _id: category._id.toString() },
+      category: { ...category.toJSON(), _id: category.id.toString(), id: category.id.toString() },
     });
   } catch (error) {
     console.error("Error creating category:", error);
@@ -38,10 +35,12 @@ export const getCategories = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const categories = await Category.find({ userId }).sort({ createdAt: -1 });
+    const categories = await Category.findAll({ 
+      where: { userId }, 
+      order: [['createdAt', 'DESC']] 
+    });
 
-    // Get expense count for each category
-    const expenses = await Expense.find({ userId });
+    const expenses = await Expense.findAll({ where: { userId } });
 
     const categoriesWithCount = categories.map((cat) => {
       const expenseCount = expenses.filter(
@@ -49,7 +48,9 @@ export const getCategories = async (req, res) => {
       ).length;
 
       return {
-        ...cat.toObject(),
+        ...cat.toJSON(),
+        _id: cat.id.toString(),
+        id: cat.id.toString(),
         expenseCount,
       };
     });
@@ -71,8 +72,7 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ error: "Category name is required" });
     }
 
-    // Get old category
-    const oldCategory = await Category.findById(id);
+    const oldCategory = await Category.findByPk(id);
     
     if (!oldCategory) {
       return res.status(404).json({ error: "Category not found" });
@@ -84,29 +84,26 @@ export const updateCategory = async (req, res) => {
 
     const oldName = oldCategory.name;
 
-    // Check if new name already exists
-    const existingCategory = await Category.findOne({ userId, name: newName });
+    const existingCategory = await Category.findOne({ where: { userId, name: newName } });
 
-    if (existingCategory && existingCategory._id.toString() !== id) {
+    if (existingCategory && existingCategory.id.toString() !== id) {
       return res.status(400).json({ error: "Category name already exists" });
     }
 
-    // Update category
     oldCategory.name = newName;
     await oldCategory.save();
 
-    // CASCADE UPDATE: Update all expenses with this category
-    const updateResult = await Expense.updateMany(
-      { userId, category: oldName },
-      { $set: { category: newName } }
+    const updateResult = await Expense.update(
+      { category: newName },
+      { where: { userId, category: oldName } }
     );
 
-    console.log(`Cascading update: ${updateResult.modifiedCount} expenses updated from "${oldName}" to "${newName}"`);
+    console.log(`Cascading update: ${updateResult[0]} expenses updated from "${oldName}" to "${newName}"`);
 
     res.json({
       message: "Category updated successfully",
-      category: { ...oldCategory.toObject(), _id: id },
-      expensesUpdated: updateResult.modifiedCount,
+      category: { ...oldCategory.toJSON(), _id: id.toString(), id: id.toString() },
+      expensesUpdated: updateResult[0],
     });
   } catch (error) {
     console.error("Error updating category:", error);
@@ -119,7 +116,7 @@ export const deleteCategory = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.userId;
 
-    const category = await Category.findById(id);
+    const category = await Category.findByPk(id);
 
     if (!category) {
       return res.status(404).json({ error: "Category not found" });
@@ -129,8 +126,7 @@ export const deleteCategory = async (req, res) => {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    // CHECK CASCADE: Check if category is used in expenses
-    const expenseCount = await Expense.countDocuments({ userId, category: category.name });
+    const expenseCount = await Expense.count({ where: { userId, category: category.name } });
 
     if (expenseCount > 0) {
       return res.status(400).json({
@@ -139,8 +135,7 @@ export const deleteCategory = async (req, res) => {
       });
     }
 
-    // Delete category
-    await category.deleteOne();
+    await category.destroy();
 
     res.json({ 
       message: "Category deleted successfully",

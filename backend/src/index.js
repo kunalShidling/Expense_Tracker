@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import connectDB from "./mongodb.js";
+import { connectDB } from "./mysql.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import expenseRoutes from "./routes/expenseRoutes.js";
@@ -10,14 +10,14 @@ import aiRoutes from "./routes/aiRoutes.js";
 
 dotenv.config();
 
-// Connect to MongoDB
+// Connect to MySQL
 connectDB();
 
 const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:5174"],
     methods: "GET,POST,PATCH,DELETE",
     allowedHeaders: "Content-Type,Authorization",
   })

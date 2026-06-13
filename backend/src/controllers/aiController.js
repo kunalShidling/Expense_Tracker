@@ -6,9 +6,11 @@ export const predictExpense = async (req, res) => {
 
     console.log("Fetching expenses for user:", userId);
 
-    const expenses = await Expense.find({ userId })
-      .sort({ date: -1 })
-      .limit(50);
+    const expenses = await Expense.findAll({ 
+      where: { userId },
+      order: [['date', 'DESC']],
+      limit: 50
+    });
 
     console.log("Found expenses:", expenses.length);
 
@@ -18,20 +20,19 @@ export const predictExpense = async (req, res) => {
       });
     }
 
-    // Calculate predictions based on historical data
     const categoryTotals = {};
     const categoryCount = {};
 
-    expenses.forEach(expense => {
+    expenses.forEach(exp => {
+      const expense = exp.toJSON();
       const cat = expense.category || "Uncategorized";
       categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
       categoryCount[cat] = (categoryCount[cat] || 0) + 1;
     });
 
-    // Generate predictions based on averages
     const predictions = Object.keys(categoryTotals).map(category => {
       const avgAmount = Math.round(categoryTotals[category] / categoryCount[category]);
-      const predictedAmount = Math.round(avgAmount * 1.1); // Predict 10% increase
+      const predictedAmount = Math.round(avgAmount * 1.1); 
       
       return {
         category,

@@ -1,38 +1,35 @@
-import mongoose from "mongoose";
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../mysql.js';
 
-const expenseSchema = new mongoose.Schema(
-  {
-    userId: {
-      type: String,
-      required: true,
-      index: true,
-    },
-    amount: {
-      type: Number,
-      required: true,
-    },
-    category: {
-      type: String,
-      required: true,
-    },
-    description: {
-      type: String,
-      default: "",
-    },
-    date: {
-      type: Date,
-      required: true,
-      default: Date.now,
-    },
+const Expense = sequelize.define('Expense', {
+  userId: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  {
-    timestamps: true,
-  }
-);
-
-// Compound index for userId and date
-expenseSchema.index({ userId: 1, date: -1 });
-
-const Expense = mongoose.model("Expense", expenseSchema);
+  amount: {
+    type: DataTypes.FLOAT,
+    allowNull: false,
+  },
+  category: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  description: {
+    type: DataTypes.STRING,
+    defaultValue: "",
+  },
+  date: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['userId', 'date']
+    }
+  ]
+});
 
 export default Expense;
